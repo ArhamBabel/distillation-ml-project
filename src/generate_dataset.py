@@ -57,7 +57,7 @@ def generate_dataset(target_rows=TARGET_ROWS, seed=SEED):
 
             if result is not None:
                 # --- Energy layer ---
-                Q_reb = compute_energy(F, result["R"], lam)
+                Q_reb = compute_energy(F, result["R"], lam, z_F, x_D, x_B)
 
                 result["system_id"] = system_id
                 result["F"] = F
