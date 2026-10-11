@@ -225,3 +225,54 @@ found to improve meaningfully with more data (R² rose from 0.608 to 0.704 when 
 2,000 to 5,000 rows, with hyperparameters held constant), confirming dataset size was a
 genuine limiting factor. The dataset was regenerated at 5,000 rows as the new primary
 dataset for all subsequent phases (EDA, modeling, optimization, dashboard).
+
+## 11. Reboiler Energy Calculation (Q_reb)
+
+**Category: Established principle**
+
+The distillate flow rate D is derived from the overall and component material
+balances around the column:
+
+- Overall balance: F = D + B
+- Component balance: F · z_F = D · x_D + B · x_B
+
+Solving these two equations gives:
+
+    D = F · (z_F - x_B) / (x_D - x_B)
+
+The vapor rate in the rectifying section follows from L = R · D and V = L + D:
+
+    V = (R + 1) · D
+
+These are standard binary-distillation material-balance relations, not
+simplifications introduced for this project.
+
+**Category: Project assumption**
+
+- **Constant molar overflow (CMO):** molar liquid and vapor flow rates are
+  assumed constant within each section of the column. This is a standard
+  simplifying assumption for shortcut (FUG-based) design and is consistent
+  with the rest of the project's methodology.
+- **Saturated-liquid feed (q = 1):** the feed is assumed to enter at its
+  bubble point, so all of it joins the liquid stream and the reboiler
+  boilup rate equals V. For a partially vaporized or subcooled feed, the
+  boilup rate would differ from V, and this relationship would need to be
+  re-derived.
+- **Units:** F is assumed to be in kmol/h and lam (molar latent heat of
+  vaporization) in kJ/kmol, giving Q_reb in kJ/h. These units are not
+  stated elsewhere in the codebase; they were assumed to be consistent with
+  the FUG design method's typical scale and were not independently verified
+  against a cited source.
+
+**Correction note (regenerated dataset)**
+
+The original implementation of `compute_energy` computed V as
+`F · (R + 1)`, using the feed flow rate F in place of the distillate flow
+rate D. This conflates feed and distillate flow and overstates Q_reb by a
+factor of F/D (roughly 1.2x to 5x across the dataset's range of feed and
+purity conditions). The formula was corrected to use V = (R + 1) · D as
+derived above, and the dataset was regenerated with the same random seed
+(42) so that only Q_reb values changed; all other columns are identical to
+the prior version. The original (uncorrected) dataset is retained at
+`data/distillation_purity_dataset_5000_archive_old_energy.csv` for
+reference and reproducibility.
