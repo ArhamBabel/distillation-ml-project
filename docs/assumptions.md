@@ -276,3 +276,55 @@ derived above, and the dataset was regenerated with the same random seed
 the prior version. The original (uncorrected) dataset is retained at
 `data/distillation_purity_dataset_5000_archive_old_energy.csv` for
 reference and reproducibility.
+
+## Optimization Module
+
+**Category: Modeling choice**
+
+The optimizer searches for the reflux ratio (R), number of trays (N), and
+bottoms composition (x_B) that minimize predicted reboiler duty (Q_reb),
+subject to predicted distillate purity (x_D) meeting a user-specified
+target. The chemical system, feed composition (z_F), and feed flow rate
+(F) are treated as fixed operating context rather than decision variables.
+
+**Search method:** a vectorized grid search over R and x_B, at a fixed,
+user-chosen N (trays are swept externally across a small set of values to
+produce an energy-vs-trays trade-off curve, rather than searched jointly
+with R and x_B in one optimization). Grid search was chosen over
+gradient-based scipy methods because a Random Forest's prediction surface
+is piecewise constant, so gradients are zero almost everywhere and
+gradient-based optimizers tend to stall.
+
+**Search bounds:** R, N, and x_B are each bounded within, but slightly
+narrower than, the full range of the training dataset (e.g. R in
+[0.5, 10.0] against a true training range of [0.5, 17.9]) to avoid
+extrapolating into thinly sampled tail regions of the Random Forest's
+training data.
+
+**Category: Project assumption**
+
+Each chemical system's alpha and lam are fixed at the midpoint of that
+system's sampling range (see SYSTEMS in src/generate_dataset.py), rather
+than at any single "representative" value chosen for a physical reason.
+
+**Validation: FUG ground-truth check**
+
+For two optimizer recommendations (one at N=25, in the interior of the
+feasible region, and one at N=16, the feasibility boundary for the tested
+purity target), the recommended R and x_B were plugged back into the
+actual FUG design equations by solving for the R_factor that reproduces
+the same R (via `scipy.optimize.brentq`). The resulting N from the real
+FUG calculation was compared against the N assumed by the optimizer:
+
+- N=25 case: FUG gave N=25.69 (about 2.8% difference)
+- N=16 case: FUG gave N=15.86 (about 0.9% difference)
+
+Both results are close enough to treat the surrogate's predictions as
+physically consistent at these points, including at the feasibility
+boundary, where a surrogate model is most likely to diverge from the
+underlying physics.
+
+**Limitation:** only two points have been checked this way; this is not
+an exhaustive validation of the surrogate's accuracy across the full
+search space, and should be read as a spot-check rather than a proof of
+general reliability.
