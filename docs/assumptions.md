@@ -117,11 +117,11 @@ being overly restrictive.
 
 ---
 
-## 7. Not Yet Covered
+## 7. Energy Layer Status
 
-The energy/throughput layer (feed flow rate F, feed thermal condition q → reboiler duty /
-energy consumption) has not yet been designed. This will be added as a new section once
-those decisions are made.
+The energy/throughput layer (feed flow rate F, latent heat λ → reboiler duty Q_reb) has
+been fully designed, implemented, and validated. See Section 8 for the governing equations
+and Section 11 for the complete derivation and unit analysis.
 
 ---
 
@@ -140,10 +140,14 @@ those decisions are made.
 
 **Vapor flow (Established Principle — standard shortcut distillation relation):**
 
-V = F * (R + 1)
+V = (R + 1) * D
 
-Vapor flow in the rectifying section relates directly to reflux ratio and feed rate — more
-reflux means more internal liquid/vapor recycling, requiring more vapor to be generated.
+where D is the distillate flow rate derived from the overall and component material balance:
+D = F * (z_F - x_B) / (x_D - x_B)
+
+Vapor flow in the rectifying section is proportional to the distillate flow rate D and the
+reflux ratio R. Under constant molar overflow (CMO) and with L = R·D, the balance across
+the top of the column gives V = L + D = (R+1)·D. See Section 11 for the full derivation.
 
 **Reboiler duty (Established Principle — standard simplified energy balance):**
 
@@ -157,7 +161,7 @@ column heat losses, or feed thermal condition effects on the energy balance dire
 
 | Element                                   | Classification         | Note |
 |--------------------------------------------|--------------------------|------|
-| V = F(R+1) relation                        | Established Principle    | Standard shortcut distillation vapor flow relation |
+| V = (R + 1) · D relation                   | Established Principle    | Standard material-balance vapor flow; D from overall + component balance |
 | Q_reb = V × lam                            | Established Principle    | Standard simplified reboiler energy balance |
 | lam sampled 25,000–35,000 kJ/kmol           | Project Assumption        | Representative range for common organic mixtures, not tied to a specific real compound |
 | F sampled 100–500 kmol/hr                   | Project Assumption        | Represents a moderate industrial-scale column |

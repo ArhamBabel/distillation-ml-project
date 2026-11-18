@@ -1,7 +1,10 @@
 import joblib
+from pathlib import Path
 
-model_xD = joblib.load("model_xD.joblib")
-model_Qreb = joblib.load("model_Qreb.joblib")
+_MODEL_DIR = Path(__file__).resolve().parent
+
+model_xD = joblib.load(_MODEL_DIR / "model_xD.joblib")
+model_Qreb = joblib.load(_MODEL_DIR / "model_Qreb.joblib")
 
 # Search bounds, based on the training data's distribution (data/distillation_purity_dataset.csv)
 R_BOUNDS = (0.5, 10.0)
@@ -21,24 +24,27 @@ SYSTEMS = {
 
 def optimize(system_id, z_F, F, N, purity_spec, n_R=50, n_xB=50):
     """
-    Find the reflux ratio (R), number of trays (N), and bottoms
-    composition (x_B) that minimize predicted reboiler duty (Q_reb),
-    subject to predicted distillate purity (x_D) >= purity_spec.
+    Find the reflux ratio (R) and bottoms composition (x_B) that
+    minimize predicted reboiler duty (Q_reb), subject to predicted
+    distillate purity (x_D) >= purity_spec, at a fixed number of
+    trays (N).
 
     Fixed inputs:
         system_id    : 1-5, selects alpha and lam from SYSTEMS
         z_F          : feed composition (mole fraction light key)
-        F            : feed flow rate
+        F            : feed flow rate (kmol/h)
+        N            : number of trays (fixed per call)
     Decision variables (searched over a grid):
-        R  in R_BOUNDS
-        N  in N_BOUNDS
+        R   in R_BOUNDS
         x_B in XB_BOUNDS
     Other parameters:
         purity_spec  : minimum required x_D
-        n_R, n_N, n_xB : number of grid points per dimension
+        n_R, n_xB    : number of grid points per dimension
 
     Returns:
-        TODO (decided in the next step)
+        dict with keys: feasible (bool), and if feasible:
+        R, N, x_B, x_D_pred, Q_reb_pred (float, in kJ/h).
+        If infeasible: message (str).
     """
     import numpy as np
 
@@ -109,4 +115,63 @@ def optimize(system_id, z_F, F, N, purity_spec, n_R=50, n_xB=50):
 
     return result
 
-   
+
+def predict(system_id, z_F, F, R, N, x_B):
+    """
+    Predict distillate purity (x_D) and reboiler duty (Q_reb) for a
+    single operating point using the trained RF surrogate models.
+
+    Parameters:
+        system_id : 1-5, selects alpha and lam from SYSTEMS
+        z_F       : feed composition (mole fraction light key)
+        F         : feed flow rate (kmol/h)
+        R         : reflux ratio (dimensionless)
+        N         : number of trays
+        x_B       : bottoms composition (mole fraction light key)
+
+    Returns:
+        dict with keys: x_D_pred (float), Q_reb_pred (float, kJ/h).
+    """
+    import numpy as np
+    import pandas as pd
+
+    alpha = SYSTEMS[system_id]["alpha"]
+    lam = SYSTEMS[system_id]["lam"]
+
+    # x_D model feature order: [R, N, z_F, alpha, F, x_B]
+    X_xD = pd.DataFrame([{
+        "R": R, "N": N, "z_F": z_F, "alpha": alpha, "F": F, "x_B": x_B,
+    }])
+    x_D_pred = float(model_xD.predict(X_xD)[0])
+
+    # Q_reb model feature order: [R, N, z_F, alpha, F, lam, x_D, x_B]
+    X_Qreb = pd.DataFrame([{
+        "R": R, "N": N, "z_F": z_F, "alpha": alpha, "F": F,
+        "lam": lam, "x_D": x_D_pred, "x_B": x_B,
+    }])
+    Q_reb_pred = float(np.exp(model_Qreb.predict(X_Qreb)[0]))
+
+    return {"x_D_pred": x_D_pred, "Q_reb_pred": Q_reb_pred}
+
+
+def n_sweep(system_id, z_F, F, purity_spec, N_values):
+    """
+    Run optimize() at each N in N_values and collect results.
+
+    Parameters:
+        system_id   : 1-5, selects alpha and lam from SYSTEMS
+        z_F         : feed composition (mole fraction light key)
+        F           : feed flow rate (kmol/h)
+        purity_spec : minimum required x_D
+        N_values    : list/iterable of tray counts to sweep
+
+    Returns:
+        list of dicts, one per N. Each dict is the optimize() result
+        with 'N' always present (even for infeasible cases).
+    """
+    results = []
+    for N in N_values:
+        res = optimize(system_id, z_F, F, N, purity_spec)
+        res["N"] = N
+        results.append(res)
+    return results
