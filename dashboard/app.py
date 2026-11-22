@@ -40,7 +40,7 @@ optimize = opt.optimize
 n_sweep = opt.n_sweep
 SYSTEMS = opt.SYSTEMS
 R_BOUNDS = opt.R_BOUNDS
-N_BOUNDS = opt.N_BOUNDS
+N_BOUNDS = getattr(opt, "N_BOUNDS", (6.0, 25.0))
 XB_BOUNDS = opt.XB_BOUNDS
 
 # ---------------------------------------------------------------------------
@@ -117,7 +117,13 @@ def _fmt_qreb(val):
 def _check_training_range(label, value, lo, hi):
     """Return a warning string if value is outside the training range."""
     if value < lo or value > hi:
-        return f"⚠️ {label} = {value:.4f} is outside the training range [{lo}, {hi}]. Predictions may be unreliable."
+        if label in ("N", "F") and float(value).is_integer():
+            val_str = f"{int(value)}"
+        elif label == "R":
+            val_str = f"{value:.2f}"
+        else:
+            val_str = f"{value:.4f}"
+        return f"⚠️ {label} = {val_str} is outside the training range [{lo}, {hi}]. Predictions may be unreliable."
     return None
 
 
@@ -163,12 +169,12 @@ with tab_predict:
         )
         p_R = st.slider(
             "Reflux ratio (R)",
-            min_value=0.5, max_value=10.0, value=3.0, step=0.1,
+            min_value=0.5, max_value=20.0, value=3.0, step=0.1,
             key="pred_R",
         )
         p_N = st.slider(
             "Number of trays (N)",
-            min_value=6.0, max_value=25.0, value=16.0, step=1.0,
+            min_value=6.0, max_value=50.0, value=16.0, step=1.0,
             key="pred_N",
         )
         p_x_B = st.slider(
