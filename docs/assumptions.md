@@ -169,10 +169,10 @@ column heat losses, or feed thermal condition effects on the energy balance dire
 
 ### 8.4 Known Limitation
 
-Q_reb shows a wide range in the generated dataset (~4.8 million to ~264 million, roughly a
-55x spread), driven mainly by the wide range of R from the purity layer. This is physically
-expected (very high-reflux designs do consume dramatically more energy) but may warrant a
-log-transform of Q_reb before ML model training, to be assessed during EDA.
+Q_reb shows a wide range in the generated dataset (~1.82 million to ~77.8 million kJ/h, roughly a
+43x span), driven mainly by the wide range of R from the purity layer. This is physically
+expected (very high-reflux designs do consume dramatically more energy) but warrants a
+log-transform of Q_reb before ML model training, as implemented during modeling.
 
 ### 8.5 Open Question for Future Consideration
 
@@ -285,50 +285,46 @@ reference and reproducibility.
 
 **Category: Modeling choice**
 
-The optimizer searches for the reflux ratio (R), number of trays (N), and
-bottoms composition (x_B) that minimize predicted reboiler duty (Q_reb),
-subject to predicted distillate purity (x_D) meeting a user-specified
-target. The chemical system, feed composition (z_F), and feed flow rate
-(F) are treated as fixed operating context rather than decision variables.
+The optimizer finds the operating conditions that minimize predicted reboiler duty (Q_reb)
+subject to meeting a user-specified distillate purity target (x_D ≥ purity_spec). The
+chemical system, feed composition (z_F), feed flow rate (F), and number of theoretical
+trays (N) are treated as fixed, exogenous design inputs during each optimization call.
+Reflux ratio (R) and bottoms composition (x_B) are the two decision variables searched
+over a 50 × 50 grid.
 
-**Search method:** a vectorized grid search over R and x_B, at a fixed,
-user-chosen N (trays are swept externally across a small set of values to
-produce an energy-vs-trays trade-off curve, rather than searched jointly
-with R and x_B in one optimization). Grid search was chosen over
-gradient-based scipy methods because a Random Forest's prediction surface
-is piecewise constant, so gradients are zero almost everywhere and
-gradient-based optimizers tend to stall.
+**Search bounds and method:** Grid search was chosen over gradient-based methods because
+the Random Forest surrogate model has a piecewise constant prediction surface with zero
+gradients almost everywhere. To keep all candidates strictly within the training-supported
+R_factor envelope [1.1, 2.5], the effective search interval for R is dynamically
+calculated from the binary q=1 pinch-point minimum reflux estimate (R_min):
 
-**Search bounds:** R, N, and x_B are each bounded within, but slightly
-narrower than, the full range of the training dataset (e.g. R in
-[0.5, 10.0] against a true training range of [0.5, 17.9]) to avoid
-extrapolating into thinly sampled tail regions of the Random Forest's
-training data.
+    R_low  = max(0.5, 1.1 * R_min)
+    R_high = min(10.0, 2.5 * R_min)
+
+Bottoms composition is searched across the dataset support bounds x_B ∈ [0.01, 0.05].
+
+**Surrogate screening and physical validation workflow:**
+1. All 2,500 grid candidates are evaluated by the trained Random Forest purity surrogate (`model_xD`).
+2. Candidates meeting the purity constraint (predicted x_D ≥ purity_spec) are filtered, and their reboiler duties are predicted by the energy surrogate (`model_Qreb`).
+3. Feasible candidates are sorted in ascending order of predicted reboiler duty (lowest energy first).
+4. Each candidate undergoes independent first-principles validation against the Fenske–Underwood–Gilliland (FUG) shortcut design equations (`src/distillation_physics.py`).
+5. A candidate is accepted only if the theoretical tray requirement computed by FUG satisfies:
+
+       FUG_N <= N_actual
+
+6. The optimizer returns the lowest-energy candidate passing this strict physical feasibility check. If all candidates fail, the condition is returned as infeasible.
 
 **Category: Project assumption**
 
-Each chemical system's alpha and lam are fixed at the midpoint of that
-system's sampling range (see SYSTEMS in src/generate_dataset.py), rather
-than at any single "representative" value chosen for a physical reason.
+Each chemical system's alpha and lam are fixed at the midpoint of that system's sampling range
+(see SYSTEMS in src/generate_dataset.py), rather than at any single "representative" value
+chosen for a physical reason.
 
-**Validation: FUG ground-truth check**
+**Validation: Independent FUG check**
 
-For two optimizer recommendations (one at N=25, in the interior of the
-feasible region, and one at N=16, the feasibility boundary for the tested
-purity target), the recommended R and x_B were plugged back into the
-actual FUG design equations by solving for the R_factor that reproduces
-the same R (via `scipy.optimize.brentq`). The resulting N from the real
-FUG calculation was compared against the N assumed by the optimizer:
-
-- N=25 case: FUG gave N=25.69 (about 2.8% difference)
-- N=16 case: FUG gave N=15.86 (about 0.9% difference)
-
-Both results are close enough to treat the surrogate's predictions as
-physically consistent at these points, including at the feasibility
-boundary, where a surrogate model is most likely to diverge from the
-underlying physics.
-
-**Limitation:** only two points have been checked this way; this is not
-an exhaustive validation of the surrogate's accuracy across the full
-search space, and should be read as a spot-check rather than a proof of
-general reliability.
+In addition to in-line validation during optimization, standalone verification
+(`src/validate_fug.py`) independently confirms that the FUG shortcut equations converge.
+For example, evaluating the benchmark operating point at N=16 (R=4.5714, z_F=0.5,
+purity_spec=0.95, alpha=1.75) via Brent's root-finding method yields R_factor = 1.9819 and
+FUG_N = 15.8633 ≤ 16, independently confirming physical consistency at the feasibility
+boundary.

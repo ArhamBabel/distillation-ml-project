@@ -40,7 +40,6 @@ optimize = opt.optimize
 n_sweep = opt.n_sweep
 SYSTEMS = opt.SYSTEMS
 R_BOUNDS = opt.R_BOUNDS
-N_BOUNDS = getattr(opt, "N_BOUNDS", (6.0, 25.0))
 XB_BOUNDS = opt.XB_BOUNDS
 
 # ---------------------------------------------------------------------------
@@ -343,9 +342,15 @@ with tab_optimize:
                     )
 
                     st.markdown("---")
+                    if "fug_N" in res and res["fug_N"] is not None:
+                        st.caption(
+                            f"Verified FUG theoretical trays: **{float(res['fug_N']):.4f}** (satisfies physical feasibility constraint FUG_N ≤ {o_N:.0f})"
+                        )
                     st.caption(
-                        f"Search grid: R ∈ [{R_BOUNDS[0]}, {R_BOUNDS[1]}] (50 pts) × "
-                        f"x_B ∈ [{XB_BOUNDS[0]}, {XB_BOUNDS[1]}] (50 pts) = 2 500 candidates."
+                        f"Search grid: R ∈ [max({R_BOUNDS[0]}, 1.1·R_min), min({R_BOUNDS[1]}, 2.5·R_min)] (50 pts) × "
+                        f"x_B ∈ [{XB_BOUNDS[0]}, {XB_BOUNDS[1]}] (50 pts) = 2 500 candidates. "
+                        f"Screened by ML purity surrogate (x_D ≥ {o_purity:.3f}), ranked by lowest Q_reb, "
+                        f"and validated against independent FUG shortcut equations (FUG_N ≤ {o_N:.0f})."
                     )
                 else:
                     st.error(
@@ -488,15 +493,17 @@ with tab_optimize:
             "**Objective:** Minimize predicted reboiler duty Q_reb (kJ/h).\n\n"
             "**Constraint:** Predicted distillate purity x_D ≥ purity specification.\n\n"
             "**Decision variables:** Reflux ratio R and bottoms composition x_B, "
-            "searched over a 50 × 50 grid within the bounds "
-            f"R ∈ [{R_BOUNDS[0]}, {R_BOUNDS[1]}], "
-            f"x_B ∈ [{XB_BOUNDS[0]}, {XB_BOUNDS[1]}].\n\n"
+            "searched over a 50 × 50 grid. Rather than searching an unqualified [0.5, 10] interval, "
+            "the effective search interval for R is dynamically calculated from R_min to keep candidates "
+            "within the training-supported R_factor envelope [1.1, 2.5]:\n"
+            f"- R ∈ [max({R_BOUNDS[0]}, 1.1·R_min), min({R_BOUNDS[1]}, 2.5·R_min)]\n"
+            f"- x_B ∈ [{XB_BOUNDS[0]}, {XB_BOUNDS[1]}].\n\n"
             "**Fixed inputs:** Chemical system (sets α, λ at midpoint), feed composition z_F, "
             "feed flow rate F, and number of trays N.\n\n"
-            "**Method:** Grid search was chosen over gradient-based methods because "
-            "the Random Forest prediction surface is piecewise constant (zero gradient "
-            "almost everywhere). The grid is bounded within the training data range "
-            "to avoid extrapolation.\n\n"
+            "**Validation workflow:** Candidate operating points that satisfy the ML purity "
+            "target are ranked in ascending order of predicted reboiler duty. Each candidate is then "
+            "independently validated using the first-principles Fenske–Underwood–Gilliland (FUG) equations. "
+            "A candidate is accepted only if the required theoretical stages satisfy FUG_N ≤ N_actual.\n\n"
             "**Why N is fixed per call:** More trays always reduce energy for a given purity "
             "(the capital-vs-operating-cost trade-off is not modeled). The tray trade-off "
             "analysis sweeps N externally to visualize this relationship."

@@ -388,7 +388,7 @@ The table below presents the strict FUG validation results for the standard benc
 | 25 | Feasible | 2.7271 | 24.4177 | 21,212,572.76 |
 
 Key observations:
-- Column sizes N ≤ 15 are correctly identified as physically infeasible for the requested 95 % purity specification under the supported reflux bounds.
+- Column sizes N ≤ 15 are infeasible within the optimizer's supported search envelope and constraints ($R \le 2.5 \cdot R_{min}$, $x_B \ge 0.01$, and the implemented grid-search bounds) for the requested 95 % purity specification, rather than implying that no physically possible design at higher reflux ratios could ever achieve the target separation.
 - For all feasible designs (N ≥ 16), the independent FUG shortcut calculation confirms that the required theoretical stages do not exceed available column trays (`FUG_N <= N_actual`).
 - In addition, the standalone script `src/validate_fug.py` provides a separate, independent single-point validation case. It evaluates an alternative operating point at $N=16$ ($R=4.5714$, $x_D \approx 0.9509$, $x_B \approx 0.0467$) using Brent's root-finding method on the FUG equations, yielding $R_{factor} = 1.9819$ and $FUG\_N = 15.8633 \le 16$. This is a distinct operating point from the optimal $N=16$ sweep result in the table above ($R=4.4357$, $FUG\_N = 15.9854$) and demonstrates that the FUG shortcut equations independently converge across different operating specifications.
 
